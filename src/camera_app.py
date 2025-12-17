@@ -10,42 +10,33 @@ import cv2
 import joblib
 
 #CNN Feature Extractor
-class CNNFeatureExtractor(BaseEstimator, TransformerMixin):
-    def __init__(self, img_size=(224, 224), batch_size=32):
-        self.img_size = img_size
-        self.batch_size = batch_size
-        self.cnn = ResNet50(
-            weights="imagenet",
-            include_top=False,
-            pooling="avg"
-        )
+# Function to extract CNN features in batches
+cnn = ResNet50(weights="imagenet", include_top=False, pooling="avg")
 
-    def fit(self, X, y=None):
-        print("CNN FeatureExtractor ready.")
-        return self
+def cnn_features_extraction(image_paths, img_size=(224, 224), batch_size=32):
+    features = []
+    batch_imgs = []
 
-    def transform(self, X):
-        features = []
-        batch_imgs = []
+    for i, img_path in enumerate(image_paths):
+        img = cv2.imread(img_path)
+        if img is None:
+            continue
 
-        for i, img_path in enumerate(X):
-            img = cv2.imread(img_path)
-            if img is None:
-                continue
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, img_size)
+        img = img.astype(np.float32)
+        batch_imgs.append(img)
 
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = cv2.resize(img, self.img_size)
-            img = img.astype(np.float32)
-            batch_imgs.append(img)
+        # Process batch
+        if len(batch_imgs) == batch_size or i == len(image_paths) - 1:
+            batch = np.array(batch_imgs)
+            batch = preprocess_input(batch)
+            feats = cnn.predict(batch, verbose=0)
+            features.extend(feats)
+            batch_imgs = []
 
-            if len(batch_imgs) == self.batch_size or i == len(X) - 1:
-                batch = np.array(batch_imgs)
-                batch = preprocess_input(batch)
-                feats = self.cnn.predict(batch, verbose=0)
-                features.extend(feats)
-                batch_imgs = []
+    return np.array(features)
 
-        return np.array(features)
 
 # Load Model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -75,8 +66,8 @@ while True:
     if frame_count % 30 == 0:
         frame_resized = cv2.resize(frame, (224, 224))
         cv2.imwrite(TEMP_IMG_PATH, frame_resized)
-
-        predicted_index = svc_pipeline_2.predict([TEMP_IMG_PATH])[0]
+        features = cnn_features_extraction([TEMP_IMG_PATH])
+        predicted_index = svc_pipeline_2.predict(features)[0]
         predicted_label = classes[int(predicted_index)]  # Map numeric index to class name
 
         # Print prediction to terminal
